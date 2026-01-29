@@ -1,203 +1,162 @@
 import turtle
 import math
 import random
+from typing import List, Tuple, Dict, Any
 
-# =========================
-# Global time scale
-# =========================
-TIME_SCALE = 0.3
+# =================================================================
+# CONFIGURATION & DATA (Data-Driven Design)
+# =================================================================
+SIM_CONFIG = {
+    "screen_width": 1200,
+    "screen_height": 800,
+    "bg_color": "#050505",  # Deep space black
+    "time_scale": 0.5,
+    "star_count": 150
+}
 
-# =========================
-# Screen setup
-# =========================
-screen = turtle.Screen()
-screen.bgcolor("black")
-screen.title("Solar System - Python Turtle")
-screen.setup(width=1200, height=800)
-screen.tracer(0)
+# Senior Tip: Move hardcoded data into a structure for easy maintenance
+PLANET_DATA = [
+    {"name": "Mercury", "color": "#A5A5A5", "size": 5, "radius": 60, "speed": 0.8},
+    {"name": "Venus",   "color": "#E3BB76", "size": 8, "radius": 90, "speed": 0.6},
+    {"name": "Earth",   "color": "#2271B3", "size": 9, "radius": 120, "speed": 0.4},
+    {"name": "Mars",    "color": "#E27B58", "size": 7, "radius": 150, "speed": 0.3},
+    {"name": "Jupiter", "color": "#D39C7E", "size": 15, "radius": 200, "speed": 0.2},
+    {"name": "Saturn",  "color": "#C5AB6E", "size": 13, "radius": 260, "speed": 0.15, "has_rings": True},
+    {"name": "Uranus",  "color": "#BBE1E4", "size": 11, "radius": 310, "speed": 0.1},
+    {"name": "Neptune", "color": "#6081FF", "size": 11, "radius": 360, "speed": 0.08},
+]
 
-# =========================
-# Utility turtle
-# =========================
-pen = turtle.Turtle()
-pen.hideturtle()
-pen.speed(0)
+# =================================================================
+# CORE CLASSES
+# =================================================================
 
-# =========================
-# Draw stars
-# =========================
-def draw_stars(count=200):
-    pen.color("white")
-    for _ in range(count):
-        pen.penup()
-        pen.goto(
-            random.randint(-600, 600),
-            random.randint(-400, 400)
-        )
-        pen.dot(random.randint(1, 3))
-
-# =========================
-# Planet class (with label)
-# =========================
-class Planet:
-    def __init__(self, name, color, size, orbit_radius, speed):
+class CelestialBody:
+    """Base class demonstrating Type Hinting and Encapsulation."""
+    def __init__(self, name: str, color: str, size: float):
         self.name = name
-        self.orbit_radius = orbit_radius
-        self.speed = speed
-        self.angle = random.randint(0, 360)
-
         self.t = turtle.Turtle()
+        self.t.hideturtle()  # We show it only when positioned
         self.t.shape("circle")
         self.t.color(color)
         self.t.shapesize(size / 10)
         self.t.penup()
+        self.angle = random.uniform(0, 360)
 
-        self.label = turtle.Turtle()
-        self.label.hideturtle()
-        self.label.color("white")
-        self.label.penup()
+    @property
+    def pos(self) -> Tuple[float, float]:
+        """Abstract property for coordinates."""
+        return self.t.position()
 
-    def position(self):
-        x = self.orbit_radius * math.cos(math.radians(self.angle))
-        y = self.orbit_radius * math.sin(math.radians(self.angle))
-        return x, y
+class Planet(CelestialBody):
+    def __init__(self, data: Dict[str, Any]):
+        super().__init__(data["name"], data["color"], data["size"])
+        self.radius = data["radius"]
+        self.speed = data["speed"]
+        self.has_rings = data.get("has_rings", False)
+        self.t.showturtle()
 
-    def move(self):
-        x, y = self.position()
+    def update_position(self, dt: float):
+        """Standardizes movement logic."""
+        self.angle += self.speed * dt
+        x = self.radius * math.cos(math.radians(self.angle))
+        y = self.radius * math.sin(math.radians(self.angle))
         self.t.goto(x, y)
 
-        self.label.goto(x, y + 12)
-        self.label.clear()
-        self.label.write(self.name, align="center", font=("Arial", 8, "normal"))
+class Satellite(CelestialBody):
+    """Demonstrates Composition: A body that follows a parent."""
+    def __init__(self, name: str, parent: Planet, orbit_dist: int, speed: float):
+        super().__init__(name, "white", 3)
+        self.parent = parent
+        self.orbit_dist = orbit_dist
+        self.speed = speed
+        self.t.showturtle()
 
-        self.angle += self.speed * TIME_SCALE
+    def update_position(self, dt: float):
+        self.angle += self.speed * dt
+        px, py = self.parent.pos
+        x = px + self.orbit_dist * math.cos(math.radians(self.angle))
+        y = py + self.orbit_dist * math.sin(math.radians(self.angle))
+        self.t.goto(x, y)
 
-# =========================
-# Sun
-# =========================
-sun = turtle.Turtle()
-sun.shape("circle")
-sun.color("yellow")
-sun.shapesize(3)
-sun.penup()
+# =================================================================
+# ENGINE CLASS
+# =================================================================
 
-sun_label = turtle.Turtle()
-sun_label.hideturtle()
-sun_label.color("white")
-sun_label.penup()
-sun_label.goto(0, -35)
-sun_label.write("Sun", align="center", font=("Arial", 10, "bold"))
+class SolarSystemEngine:
+    """The 'Controller' that manages the simulation lifecycle."""
+    def __init__(self):
+        self.screen = self._setup_screen()
+        self.pen = turtle.Turtle(visible=False)
+        self.pen.speed(0)
+        
+        # Initialize Bodies
+        self.planets = [Planet(p) for p in PLANET_DATA]
+        self.earth = next(p for p in self.planets if p.name == "Earth")
+        self.moon = Satellite("Moon", self.earth, 20, 2.5)
+        
+        self._draw_static_elements()
 
-# =========================
-# Orbits
-# =========================
-def draw_orbit(radius):
-    pen.penup()
-    pen.goto(0, -radius)
-    pen.pendown()
-    pen.color("gray")
-    pen.circle(radius)
-    pen.penup()
+    def _setup_screen(self) -> turtle.Screen:
+        s = turtle.Screen()
+        s.bgcolor(SIM_CONFIG["bg_color"])
+        s.setup(SIM_CONFIG["screen_width"], SIM_CONFIG["screen_height"])
+        s.tracer(0)
+        return s
 
-# =========================
-# Planets
-# =========================
-mercury = Planet("Mercury", "gray", 5, 60, 0.8)
-venus   = Planet("Venus", "orange", 8, 90, 0.6)
-earth   = Planet("Earth", "blue", 9, 120, 0.4)
-mars    = Planet("Mars", "red", 7, 150, 0.3)
-jupiter = Planet("Jupiter", "brown", 15, 200, 0.2)
-saturn  = Planet("Saturn", "gold", 13, 250, 0.15)
-uranus  = Planet("Uranus", "light blue", 11, 300, 0.1)
-neptune = Planet("Neptune", "blue", 11, 350, 0.08)
+    def _draw_static_elements(self):
+        """Draws stars and orbits once to save performance."""
+        # Stars
+        self.pen.color("white")
+        for _ in range(SIM_CONFIG["star_count"]):
+            self.pen.penup()
+            self.pen.goto(random.randint(-600, 600), random.randint(-400, 400))
+            self.pen.dot(random.randint(1, 2))
+        
+        # Orbits
+        self.pen.color("#333333")
+        for p in self.planets:
+            self.pen.penup()
+            self.pen.goto(0, -p.radius)
+            self.pen.pendown()
+            self.pen.circle(p.radius)
+            
+        # Sun
+        sun = turtle.Turtle(shape="circle")
+        sun.color("#FFCC00")
+        sun.shapesize(3)
+        sun.penup()
 
-planets = [
-    mercury, venus, earth, mars,
-    jupiter, saturn, uranus, neptune
-]
+    def run(self):
+        """The main animation loop."""
+        def frame():
+            # Clear dynamic labels/rings with one go
+            self.pen.clear()
+            
+            # Update all celestial bodies
+            dt = SIM_CONFIG["time_scale"]
+            for p in self.planets:
+                p.update_position(dt)
+                
+                # Draw Labels using the shared pen (More efficient than individual turtles)
+                self.pen.penup()
+                self.pen.goto(p.t.xcor(), p.t.ycor() + 15)
+                self.pen.color("white")
+                self.pen.write(p.name, align="center", font=("Verdana", 8, "normal"))
 
-# =========================
-# Moon (orbits Earth)
-# =========================
-moon = turtle.Turtle()
-moon.shape("circle")
-moon.color("light gray")
-moon.shapesize(0.4)
-moon.penup()
+                # Draw Rings if applicable
+                if p.has_rings:
+                    self.pen.goto(p.t.xcor(), p.t.ycor() - 10)
+                    self.pen.pendown()
+                    self.pen.circle(20)
 
-moon_angle = random.randint(0, 360)
-MOON_RADIUS = 20
-MOON_SPEED = 2.5
+            self.moon.update_position(dt)
+            
+            self.screen.update()
+            self.screen.ontimer(frame, 20)
+        
+        frame()
+        self.screen.mainloop()
 
-# =========================
-# Saturn rings
-# =========================
-rings = turtle.Turtle()
-rings.hideturtle()
-rings.color("#d8c690")
-rings.penup()
-
-def draw_saturn_rings(x, y):
-    rings.clear()
-    rings.goto(x, y - 5)
-    rings.setheading(0)
-    rings.pendown()
-    rings.width(2)
-
-    for size in range(18, 26, 2):
-        rings.penup()
-        rings.goto(x, y - size / 2)
-        rings.pendown()
-        rings.circle(size)
-    rings.penup()
-
-# =========================
-# Legend
-# =========================
-def draw_legend():
-    legend = turtle.Turtle()
-    legend.hideturtle()
-    legend.color("white")
-    legend.penup()
-    legend.goto(420, 300)
-    legend.write("Solar System", font=("Arial", 14, "bold"))
-
-    y = 260
-    for p in planets:
-        legend.goto(420, y)
-        legend.write(f"• {p.name}", font=("Arial", 10, "normal"))
-        y -= 20
-
-# =========================
-# Background
-# =========================
-draw_stars()
-for p in planets:
-    draw_orbit(p.orbit_radius)
-draw_legend()
-
-# =========================
-# Animation
-# =========================
-def animate():
-    global moon_angle
-
-    for p in planets:
-        p.move()
-
-    # Moon orbiting Earth
-    ex, ey = earth.position()
-    mx = ex + MOON_RADIUS * math.cos(math.radians(moon_angle))
-    my = ey + MOON_RADIUS * math.sin(math.radians(moon_angle))
-    moon.goto(mx, my)
-    moon_angle += MOON_SPEED * TIME_SCALE
-
-    # Saturn rings
-    sx, sy = saturn.position()
-    draw_saturn_rings(sx, sy)
-
-    screen.update()
-    screen.ontimer(animate, 30)
-
-animate()
-screen.mainloop()
+if __name__ == "__main__":
+    sim = SolarSystemEngine()
+    sim.run()
