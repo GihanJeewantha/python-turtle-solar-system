@@ -17,7 +17,7 @@ screen.setup(width=1200, height=800)
 screen.tracer(0)
 
 # =========================
-# Main drawing turtle
+# Utility turtle
 # =========================
 pen = turtle.Turtle()
 pen.hideturtle()
@@ -37,11 +37,15 @@ def draw_stars(count=200):
         pen.dot(random.randint(1, 3))
 
 # =========================
-# Planet class (WITH LABEL)
+# Planet class (with label)
 # =========================
 class Planet:
     def __init__(self, name, color, size, orbit_radius, speed):
         self.name = name
+        self.orbit_radius = orbit_radius
+        self.speed = speed
+        self.angle = random.randint(0, 360)
+
         self.t = turtle.Turtle()
         self.t.shape("circle")
         self.t.color(color)
@@ -53,16 +57,15 @@ class Planet:
         self.label.color("white")
         self.label.penup()
 
-        self.orbit_radius = orbit_radius
-        self.speed = speed
-        self.angle = random.randint(0, 360)
-
-    def move(self):
+    def position(self):
         x = self.orbit_radius * math.cos(math.radians(self.angle))
         y = self.orbit_radius * math.sin(math.radians(self.angle))
+        return x, y
+
+    def move(self):
+        x, y = self.position()
         self.t.goto(x, y)
 
-        # Position label slightly above planet
         self.label.goto(x, y + 12)
         self.label.clear()
         self.label.write(self.name, align="center", font=("Arial", 8, "normal"))
@@ -70,14 +73,13 @@ class Planet:
         self.angle += self.speed * TIME_SCALE
 
 # =========================
-# Draw Sun
+# Sun
 # =========================
 sun = turtle.Turtle()
 sun.shape("circle")
 sun.color("yellow")
 sun.shapesize(3)
 sun.penup()
-sun.goto(0, 0)
 
 sun_label = turtle.Turtle()
 sun_label.hideturtle()
@@ -87,7 +89,7 @@ sun_label.goto(0, -35)
 sun_label.write("Sun", align="center", font=("Arial", 10, "bold"))
 
 # =========================
-# Draw orbit paths
+# Orbits
 # =========================
 def draw_orbit(radius):
     pen.penup()
@@ -98,7 +100,7 @@ def draw_orbit(radius):
     pen.penup()
 
 # =========================
-# Create planets
+# Planets
 # =========================
 mercury = Planet("Mercury", "gray", 5, 60, 0.8)
 venus   = Planet("Venus", "orange", 8, 90, 0.6)
@@ -115,7 +117,42 @@ planets = [
 ]
 
 # =========================
-# Draw legend
+# Moon (orbits Earth)
+# =========================
+moon = turtle.Turtle()
+moon.shape("circle")
+moon.color("light gray")
+moon.shapesize(0.4)
+moon.penup()
+
+moon_angle = random.randint(0, 360)
+MOON_RADIUS = 20
+MOON_SPEED = 2.5
+
+# =========================
+# Saturn rings
+# =========================
+rings = turtle.Turtle()
+rings.hideturtle()
+rings.color("#d8c690")
+rings.penup()
+
+def draw_saturn_rings(x, y):
+    rings.clear()
+    rings.goto(x, y - 5)
+    rings.setheading(0)
+    rings.pendown()
+    rings.width(2)
+
+    for size in range(18, 26, 2):
+        rings.penup()
+        rings.goto(x, y - size / 2)
+        rings.pendown()
+        rings.circle(size)
+    rings.penup()
+
+# =========================
+# Legend
 # =========================
 def draw_legend():
     legend = turtle.Turtle()
@@ -132,20 +169,33 @@ def draw_legend():
         y -= 20
 
 # =========================
-# Draw background
+# Background
 # =========================
 draw_stars()
 for p in planets:
     draw_orbit(p.orbit_radius)
-
 draw_legend()
 
 # =========================
-# Animation loop
+# Animation
 # =========================
 def animate():
+    global moon_angle
+
     for p in planets:
         p.move()
+
+    # Moon orbiting Earth
+    ex, ey = earth.position()
+    mx = ex + MOON_RADIUS * math.cos(math.radians(moon_angle))
+    my = ey + MOON_RADIUS * math.sin(math.radians(moon_angle))
+    moon.goto(mx, my)
+    moon_angle += MOON_SPEED * TIME_SCALE
+
+    # Saturn rings
+    sx, sy = saturn.position()
+    draw_saturn_rings(sx, sy)
+
     screen.update()
     screen.ontimer(animate, 30)
 
